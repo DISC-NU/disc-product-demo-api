@@ -5,7 +5,7 @@ import {
   CreateProductBody,
   UpdateProductBody,
 } from "../types/product";
-import { getPublicImageUrl } from "../utils/storageHelper";
+import { getPublicImageUrl, createImagePath } from "../utils/storageHelper";
 
 const BUCKET_NAME = "disc-product-images";
 
@@ -20,24 +20,17 @@ const uploadProductImage = async (
   imageFile: Express.Multer.File
 ): Promise<string> => {
   try {
-    console.log("Starting image upload process...");
-    console.log("File details:", {
-      originalname: imageFile.originalname,
-      mimetype: imageFile.mimetype,
-      size: imageFile.size,
-    });
-
     const timestamp = Date.now();
     const fileExtension = imageFile.originalname.split(".").pop();
-    const fileName = `product-images/${timestamp}-${Math.random()
+    const baseFileName = `${timestamp}-${Math.random()
       .toString(36)
       .substring(7)}.${fileExtension}`;
-
-    console.log("Generated filename:", fileName);
+    const fullPath = createImagePath(baseFileName);
+    console.log("Generated filename:", fullPath);
 
     const { data, error: uploadError } = await supabase.storage
       .from(BUCKET_NAME)
-      .upload(fileName, imageFile.buffer, {
+      .upload(fullPath, imageFile.buffer, {
         contentType: imageFile.mimetype,
         upsert: false,
       });
@@ -48,13 +41,26 @@ const uploadProductImage = async (
     }
 
     console.log("Upload successful:", data);
-    return fileName;
+    return fullPath;
   } catch (error) {
     console.error("Detailed upload error:", error);
     if (error instanceof Error) {
       throw new FileUploadError(error.message);
     }
     throw new FileUploadError("Unknown error occurred during file upload");
+  }
+};
+
+const deleteProductImage = async (imageUrl: string) => {
+  const fileName = imageUrl.split("/").pop();
+  if (fileName) {
+    const { error } = await supabase.storage
+      .from(BUCKET_NAME)
+      .remove([createImagePath(fileName)]);
+
+    if (error) {
+      console.error("Error deleting image:", error);
+    }
   }
 };
 
@@ -123,21 +129,6 @@ export const createProduct: RequestHandler = async (req, res) => {
       details:
         error instanceof Error ? error.message : "An unknown error occurred",
     });
-  }
-};
-
-const deleteProductImage = async (imageUrl: string) => {
-  const BUCKET_NAME = "disc-product-images";
-  const fileName = imageUrl.split("/").pop();
-
-  if (fileName) {
-    const { error } = await supabase.storage
-      .from(BUCKET_NAME)
-      .remove([`product-images/${fileName}`]);
-
-    if (error) {
-      console.error("Error deleting image:", error);
-    }
   }
 };
 

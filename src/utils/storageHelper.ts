@@ -1,10 +1,8 @@
 import { supabase } from "../config/supabase";
 
-const BUCKET_NAME = "disc-product-images";
-
 export const getPublicImageUrl = (imageName: string): string => {
   const { data } = supabase.storage
-    .from(BUCKET_NAME)
+    .from("disc-product-images")
     .getPublicUrl(`product-images/${imageName}`);
   return data.publicUrl;
 };

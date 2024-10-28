@@ -13,7 +13,6 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY!;
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY!;
 
 const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
-
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 async function setupStorage() {
@@ -45,6 +44,65 @@ async function setupStorage() {
       console.log("Bucket already exists, skipping creation.");
     }
 
+    console.log("Setting up storage policies...");
+
+    await supabaseAdmin.rpc("enable_rls", {
+      table_name: "objects",
+      schema_name: "storage",
+    });
+
+    const policies = [
+      {
+        name: "Allow public uploads",
+        sql: `
+          CREATE POLICY "allow_public_uploads"
+          ON storage.objects FOR INSERT
+          WITH CHECK (bucket_id = '${BUCKET_NAME}' AND auth.role() = 'anon')
+        `,
+      },
+      {
+        name: "Allow public reads",
+        sql: `
+          CREATE POLICY "allow_public_reads"
+          ON storage.objects FOR SELECT
+          USING (bucket_id = '${BUCKET_NAME}')
+        `,
+      },
+      {
+        name: "Allow public updates",
+        sql: `
+          CREATE POLICY "allow_public_updates"
+          ON storage.objects FOR UPDATE
+          USING (bucket_id = '${BUCKET_NAME}')
+          WITH CHECK (bucket_id = '${BUCKET_NAME}')
+        `,
+      },
+      {
+        name: "Allow public deletes",
+        sql: `
+          CREATE POLICY "allow_public_deletes"
+          ON storage.objects FOR DELETE
+          USING (bucket_id = '${BUCKET_NAME}')
+        `,
+      },
+    ];
+
+    for (const policy of policies) {
+      try {
+        console.log(`Creating policy: ${policy.name}`);
+        await supabaseAdmin.rpc("create_storage_policy", {
+          bucket_id: BUCKET_NAME,
+          policy_name: policy.name.toLowerCase().replace(/ /g, "_"),
+          definition: policy.sql,
+        });
+      } catch (error: any) {
+        if (!error.message.includes("already exists")) {
+          console.error(`Error creating policy ${policy.name}:`, error);
+        } else {
+          console.log(`Policy ${policy.name} already exists`);
+        }
+      }
+    }
     const files = fs.readdirSync(IMAGES_DIR);
     console.log(`Found ${files.length} files to upload`);
 

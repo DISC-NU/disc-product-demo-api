@@ -1,9 +1,23 @@
 import { supabase } from "../config/supabase";
-import { Product } from "../types/product";
 import { dummyData } from "../data/dummyData";
+import { getPublicImageUrl } from "../utils/storageHelper";
 
 const resetDatabase = async () => {
   try {
+    console.log("Starting database reset...");
+
+    console.log("Ensuring products table exists...");
+    await supabase.from("products").select("id").limit(1);
+
+    console.log("Processing products with image URLs...");
+    const productsWithImages = dummyData.map((product) => {
+      const imageName = product.image_url.split("/").pop()!;
+      return {
+        ...product,
+        image_url: getPublicImageUrl(imageName),
+      };
+    });
+
     console.log("Deleting existing products...");
     const { error: deleteError } = await supabase
       .from("products")
@@ -12,10 +26,10 @@ const resetDatabase = async () => {
 
     if (deleteError) throw deleteError;
 
-    console.log("Inserting dummy products...");
+    console.log("Inserting products with image URLs...");
     const { data, error: insertError } = await supabase
       .from("products")
-      .insert(dummyData)
+      .insert(productsWithImages)
       .select();
 
     if (insertError) throw insertError;
